@@ -10,7 +10,6 @@ Userbot-based P2P payment receiver for Laravel. Listens to Uzbek bank notificati
 
 ---
 
-## English
 
 ### What it does
 
