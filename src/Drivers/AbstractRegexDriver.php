@@ -27,15 +27,17 @@ abstract class AbstractRegexDriver implements PaymentDriver
             return null;
         }
 
-        $amountTiyin = $this->extractAmountTiyin($normalized);
-        if ($amountTiyin === null || $amountTiyin <= 0) {
+        $amount = $this->extractAmount($normalized);
+        if ($amount === null) {
             return null;
         }
+
+        [$amountTiyin, $currency] = $amount;
 
         return new ParsedPayment(
             source: $this->sourceUsername,
             amountTiyin: $amountTiyin,
-            currency: 'UZS',
+            currency: $currency,
             transactionId: $this->extractTransactionId($normalized),
             senderMasked: $this->extractSender($normalized),
             receiverMasked: $this->extractReceiver($normalized),
@@ -60,11 +62,18 @@ abstract class AbstractRegexDriver implements PaymentDriver
             "\u{202F}" => ' ',
             "\u{2009}" => ' ',
             "\u{2007}" => ' ',
+            "\u{2192}" => ' -> ',
+            "\u{27A1}" => ' -> ',
+            "\u{2794}" => ' -> ',
         ];
 
         $clean = strtr($text, $replacements);
 
-        return (string) preg_replace('/[ \t]+/u', ' ', $clean);
+        $clean = (string) preg_replace('/[\p{So}\p{Cf}\p{Cs}]/u', ' ', $clean);
+
+        $clean = (string) preg_replace('/[\r\n\t]+/u', ' ', $clean);
+
+        return (string) preg_replace('/ {2,}/u', ' ', $clean);
     }
 
     protected function looksLikeIncoming(string $text): bool
@@ -103,15 +112,45 @@ abstract class AbstractRegexDriver implements PaymentDriver
         return false;
     }
 
-    protected function extractAmountTiyin(string $text): ?int
+    /**
+     * @return array{0:int,1:string}|null  [tiyin, currency]
+     */
+    protected function extractAmount(string $text): ?array
     {
         foreach ($this->amountPatterns() as $pattern) {
             if (preg_match($pattern, $text, $m) === 1) {
                 $tiyin = $this->amountToTiyin($m[1]);
-                if ($tiyin !== null && $tiyin > 0) {
-                    return $tiyin;
+                if ($tiyin === null || $tiyin <= 0) {
+                    continue;
                 }
+
+                $currency = $this->detectCurrency($m[0]) ?? $this->detectCurrency($text) ?? 'UZS';
+
+                return [$tiyin, $currency];
             }
+        }
+
+        return null;
+    }
+
+    protected function detectCurrency(string $fragment): ?string
+    {
+        $lower = mb_strtolower($fragment);
+
+        if (preg_match('/(so\'?m|so\x{2018}m|sum|сум|узс|uzs)/iu', $lower) === 1) {
+            return 'UZS';
+        }
+
+        if (preg_match('/(руб|rub|₽)/iu', $lower) === 1) {
+            return 'RUB';
+        }
+
+        if (preg_match('/(usd|долл|\$)/iu', $lower) === 1) {
+            return 'USD';
+        }
+
+        if (preg_match('/(eur|евро|€)/iu', $lower) === 1) {
+            return 'EUR';
         }
 
         return null;
@@ -128,10 +167,18 @@ abstract class AbstractRegexDriver implements PaymentDriver
         return null;
     }
 
+    private const CARD_PATTERN = '\d{4}[\s*]*\*+[\s*]*\d{2,4}';
+
     protected function extractSender(string $text): ?string
     {
-        if (preg_match('/(?:from|jo\'natuvchi|отправител[ья])[^0-9]{0,12}([0-9*]{8,})/iu', $text, $m) === 1) {
-            return $m[1];
+        $card = self::CARD_PATTERN;
+
+        if (preg_match("/({$card})\s*(?:->|→|dan\b|→|с карты)/iu", $text, $m) === 1) {
+            return $this->cleanCardMask($m[1]);
+        }
+
+        if (preg_match('/(?:from|jo\'natuvchi|отправител[ья]|с карты)[^0-9]{0,12}([0-9*]{8,})/iu', $text, $m) === 1) {
+            return $this->cleanCardMask($m[1]);
         }
 
         return null;
@@ -139,11 +186,26 @@ abstract class AbstractRegexDriver implements PaymentDriver
 
     protected function extractReceiver(string $text): ?string
     {
-        if (preg_match('/(?:karta|карт[ае])[^0-9]{0,8}(\d{4}[\s*]*\*+[\s*]*\d{2,4})/iu', $text, $m) === 1) {
-            return (string) preg_replace('/\s+/', '', $m[1]);
+        $card = self::CARD_PATTERN;
+
+        if (preg_match("/(?:->|→)\s*({$card})/iu", $text, $m) === 1) {
+            return $this->cleanCardMask($m[1]);
+        }
+
+        if (preg_match("/({$card})\s*(?:ga\b|га\b|на карту)/iu", $text, $m) === 1) {
+            return $this->cleanCardMask($m[1]);
+        }
+
+        if (preg_match("/(?:karta|карт[ае]|на карту|kartangiz)[^0-9]{0,8}({$card})/iu", $text, $m) === 1) {
+            return $this->cleanCardMask($m[1]);
         }
 
         return null;
+    }
+
+    protected function cleanCardMask(string $raw): string
+    {
+        return (string) preg_replace('/\s+/', '', $raw);
     }
 
     protected function amountToTiyin(string $raw): ?int

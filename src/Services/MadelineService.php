@@ -13,7 +13,7 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Psr\Log\LoggerInterface;
 
-final class MadelineService
+class MadelineService
 {
     private ?API $api = null;
 
@@ -68,17 +68,24 @@ final class MadelineService
 
         while (true) {
             $updates = $this->api->getUpdates(['timeout' => 30]);
+            $this->processUpdates($updates);
+        }
+    }
 
-            foreach ($updates as $update) {
-                $this->handleUpdate($update);
-            }
+    /**
+     * @param  iterable<array<string, mixed>>  $updates
+     */
+    public function processUpdates(iterable $updates): void
+    {
+        foreach ($updates as $update) {
+            $this->handleUpdate($update);
         }
     }
 
     /**
      * @param  array<string, mixed>  $update
      */
-    private function handleUpdate(array $update): void
+    protected function handleUpdate(array $update): void
     {
         $message = $this->extractMessage($update);
         if ($message === null) {
@@ -114,9 +121,24 @@ final class MadelineService
             return;
         }
 
+        if ($parsed->transactionId !== null && $this->seen('txn:'.$username.':'.$parsed->transactionId)) {
+            $this->logger->debug('algorix.payment.dedup_txn', [
+                'source' => $username,
+                'transaction_id' => $parsed->transactionId,
+            ]);
+
+            return;
+        }
+
+        $messageDate = $message['date'] ?? null;
+        if (is_int($messageDate) && $messageDate > 0) {
+            $parsed = $parsed->withReceivedAt(gmdate('Y-m-d\TH:i:s\Z', $messageDate));
+        }
+
         $this->logger->info('algorix.payment.detected', [
             'source' => $username,
             'amount_tiyin' => $parsed->amountTiyin,
+            'currency' => $parsed->currency,
             'transaction_id' => $parsed->transactionId,
         ]);
 
@@ -131,7 +153,7 @@ final class MadelineService
      * @param  array<string, mixed>  $update
      * @return array<string, mixed>|null
      */
-    private function extractMessage(array $update): ?array
+    protected function extractMessage(array $update): ?array
     {
         $type = $update['_'] ?? null;
 
@@ -148,7 +170,7 @@ final class MadelineService
     /**
      * @param  array<string, mixed>  $message
      */
-    private function extractPeerUsername(array $message): ?string
+    protected function extractPeerUsername(array $message): ?string
     {
         if ($this->api === null) {
             return null;

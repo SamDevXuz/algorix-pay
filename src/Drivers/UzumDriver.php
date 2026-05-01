@@ -31,8 +31,8 @@ final class UzumDriver extends AbstractRegexDriver
     protected function amountPatterns(): array
     {
         return [
-            '/\+\s*([0-9][0-9 .,]*)\s*(?:so\'?m|sum|сум|UZS)/iu',
-            '/([0-9][0-9 .,]*)\s*(?:so\'?m|sum|сум|UZS)/iu',
+            '/\+\s*([0-9][0-9 .,]*)\s*(?:so\'?m|sum|сум|UZS)\b/iu',
+            '/([0-9][0-9 .,]*)\s*(?:so\'?m|sum|сум|UZS)\b/iu',
             '/(?:summa|сумма|amount|miqdor)[^0-9]{0,12}([0-9][0-9 .,]*)/iu',
         ];
     }
@@ -40,9 +40,9 @@ final class UzumDriver extends AbstractRegexDriver
     protected function transactionPatterns(): array
     {
         return [
-            '/(?:chek|check|чек|receipt)[^\dA-Za-z]{0,8}([A-Za-z0-9][A-Za-z0-9\-]{4,})/iu',
-            '/(?:tranzaksiya|транзак[цс]ия|transaction|trn)[^\dA-Za-z]{0,8}([A-Za-z0-9][A-Za-z0-9\-]{4,})/iu',
-            '/(?:id|№|#)[^\dA-Za-z]{0,4}(\d{6,})/iu',
+            '/(?:chek|check|чек|receipt)\s*[:#№]\s*([A-Za-z0-9][A-Za-z0-9\-]{4,})/iu',
+            '/(?:tranzaksiya|транзак[цс]ия|transaction|trn)\s*[:#№]\s*([A-Za-z0-9][A-Za-z0-9\-]{4,})/iu',
+            '/(?:id|№|#)\s*[:-]?\s*(\d{6,})/iu',
         ];
     }
 }

@@ -28,7 +28,7 @@ final class ClickDriver extends AbstractRegexDriver
     protected function amountPatterns(): array
     {
         return [
-            '/([0-9][0-9 .,]*)\s*(?:so\'?m|so\x{2018}m|sum|сум|UZS)/iu',
+            '/([0-9][0-9 .,]*)\s*(?:so\'?m|so\x{2018}m|sum|сум|UZS)\b/iu',
             '/(?:summa|amount|miqdor)[^0-9]{0,12}([0-9][0-9 .,]*)/iu',
         ];
     }
@@ -36,8 +36,8 @@ final class ClickDriver extends AbstractRegexDriver
     protected function transactionPatterns(): array
     {
         return [
-            '/(?:tranzaksiya|транзак[цс]ия|transaction|trn|chek|check)[^\dA-Za-z]{0,8}([A-Za-z0-9]{5,})/iu',
-            '/\b(?:id|n)[^\dA-Za-z]{0,4}(\d{6,})/iu',
+            '/(?:tranzaksiya|транзак[цс]ия|transaction|trn|chek|check)\s*[:#№]\s*([A-Za-z0-9][A-Za-z0-9\-]{4,})/iu',
+            '/\b(?:id|n)\s*[:#№]\s*(\d{6,})/iu',
         ];
     }
 }

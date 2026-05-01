@@ -18,6 +18,20 @@ final class ParsedPayment
     ) {
     }
 
+    public function withReceivedAt(?string $receivedAt): self
+    {
+        return new self(
+            source: $this->source,
+            amountTiyin: $this->amountTiyin,
+            currency: $this->currency,
+            transactionId: $this->transactionId,
+            senderMasked: $this->senderMasked,
+            receiverMasked: $this->receiverMasked,
+            receivedAt: $receivedAt,
+            rawText: $this->rawText,
+        );
+    }
+
     public function toArray(): array
     {
         return [
