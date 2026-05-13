@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-13
+
+### Added
+- **Order matching** — turn the package from a parser into a P2P payment gateway.
+  - `AlgorixPay::expect(50_000)->forOrder($order)->expiresInMinutes(15)->create()` fluent API returns a `PendingPayment` with a unique amount tail (e.g. `5_000_037` tiyin).
+  - When a `PaymentReceived` event arrives with a matching `amountTiyin`, the new `MatchPendingPayment` listener atomically pulls the expectation from cache and dispatches `PaymentMatched($pending, $payment, $bankMessageId, $bankSource)`.
+- `\AlgorixPay\Facades\AlgorixPay` facade backed by `AlgorixPayManager` (hands out a fresh `PaymentExpectation` per call — no state bleed between callers).
+- `\AlgorixPay\Contracts\TailGenerator` contract with two implementations:
+  - `TiyinTailGenerator` (default, 99 slots, `50 000.37 so'm` style).
+  - `SumTailGenerator` (999 slots, `50 137 so'm` style).
+  Pluggable via `matcher.tail_generators` config map.
+- `\AlgorixPay\Support\PendingPayment` value object with scalar-only fields, `resolvePayable()` Eloquent lookup, and `toArray()` symmetric with `ParsedPayment`.
+- `\AlgorixPay\Events\PaymentExpected` event for observability — dispatched on `create()`.
+- `matcher` config section with `ALGORIX_MATCHER_*` env vars: `ENABLED`, `CACHE`, `TTL`, `PREFIX`, `CURRENCY`, `TAIL_MODE`, `MAX_ATTEMPTS`, `CURRENCY_MISMATCH`.
+- `TailExhaustedException` thrown when all tail slots for a base amount are taken.
+
+### Changed
+- `AlgorixPayServiceProvider` extracts a shared `resolveCacheStore()` helper used by both the dedup and matcher cache lookups.
+
+### Notes
+- Cache-only storage; no DB migration. The matcher's pending records live behind the configured cache store (Redis recommended for production).
+- Currency mismatch policy is configurable: `drop` (silent skip), `log` (default — warn + skip), `match_anyway` (proceed with warning).
+
 ## [0.2.0] — 2026-05-01
 
 ### Added
@@ -36,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `messageId`-based dedup with configurable TTL and cache store.
 - `pay:listen` artisan command.
 
-[Unreleased]: https://github.com/SamDevXuz/algorix-pay/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SamDevXuz/algorix-pay/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/SamDevXuz/algorix-pay/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SamDevXuz/algorix-pay/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SamDevXuz/algorix-pay/releases/tag/v0.1.0

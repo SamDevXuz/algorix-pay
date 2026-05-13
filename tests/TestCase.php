@@ -22,6 +22,10 @@ abstract class TestCase extends Orchestra
         $app['config']->set('algorix-pay.api.hash', 'test-hash');
         $app['config']->set('algorix-pay.session_path', sys_get_temp_dir().'/algorix-pay-test/userbot.madeline');
         $app['config']->set('algorix-pay.dedup.ttl_seconds', 10);
+        $app['config']->set('algorix-pay.matcher.enabled', true);
+        $app['config']->set('algorix-pay.matcher.default_ttl', 60);
+        $app['config']->set('algorix-pay.matcher.tail_mode', 'tiyin');
+        $app['config']->set('algorix-pay.matcher.currency_mismatch_action', 'drop');
         $app['config']->set('cache.default', 'array');
     }
 }

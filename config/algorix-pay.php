@@ -33,6 +33,21 @@ return [
         'cache_store' => env('ALGORIX_DEDUP_CACHE', null),
     ],
 
+    'matcher' => [
+        'enabled' => env('ALGORIX_MATCHER_ENABLED', true),
+        'cache_store' => env('ALGORIX_MATCHER_CACHE', null),
+        'default_ttl' => (int) env('ALGORIX_MATCHER_TTL', 900),
+        'key_prefix' => env('ALGORIX_MATCHER_PREFIX', 'algorix:pending:'),
+        'default_currency' => env('ALGORIX_MATCHER_CURRENCY', 'UZS'),
+        'tail_mode' => env('ALGORIX_MATCHER_TAIL_MODE', 'tiyin'),
+        'tail_generators' => [
+            'tiyin' => \AlgorixPay\Matcher\Tail\TiyinTailGenerator::class,
+            'sum' => \AlgorixPay\Matcher\Tail\SumTailGenerator::class,
+        ],
+        'tail_max_attempts' => (int) env('ALGORIX_MATCHER_MAX_ATTEMPTS', 50),
+        'currency_mismatch_action' => env('ALGORIX_MATCHER_CURRENCY_MISMATCH', 'log'),
+    ],
+
     'logging' => [
         'channel' => env('ALGORIX_LOG_CHANNEL', 'stack'),
     ],

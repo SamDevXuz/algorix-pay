@@ -94,6 +94,84 @@ Event::listen(function (PaymentReceived $event): void {
 });
 ```
 
+## Order matching (v0.3+)
+
+P2P to'lovlarda eng katta muammo — qaysi to'lov qaysi order'niki ekanligini topish. Bir vaqtda 10 ta mijoz `50 000 so'm` jo'natsa, bank xabari shuni aytadi: "50 000 so'm tushdi". Qaysi biri?
+
+Yechim: paket har bir kutilayotgan to'lov uchun **unikal tail** qo'shadi. Mijoz `50 000.37 so'm` to'laydi (37 — bizning marker), pul kelganda paket avtomatik aniqlaydi va `PaymentMatched` event chiqaradi.
+
+### Setup
+
+Facade alias'ni `bootstrap/providers.php` yoki `config/app.php`'ga qo'shing (Laravel 11+ aliaslarni avtomatik ulamaydi):
+
+```php
+// config/app.php
+'aliases' => [
+    'AlgorixPay' => \AlgorixPay\Facades\AlgorixPay::class,
+],
+```
+
+### Expect a payment
+
+```php
+use AlgorixPay\Facades\AlgorixPay;
+
+$pending = AlgorixPay::expect(50_000)         // so'mda
+    ->currency('UZS')
+    ->forOrder($order)                         // Eloquent model, string ID, yoki array
+    ->expiresInMinutes(15)
+    ->create();
+
+$pending->amountTiyin;   // 5_000_037 — to'liq summa (tiyin)
+$pending->humanAmount;   // "50 000.37 so'm" — checkout sahifasida ko'rsating
+$pending->expiresAt;     // ISO-8601 UTC
+$pending->reference;     // log korrelyatsiya uchun
+```
+
+Checkout sahifasi mijozga **aynan `50 000.37 so'm`** ni jo'natishni so'raydi. Bu summa cache'da 15 daqiqaga rezerv qilingan.
+
+### React to a match
+
+```php
+use AlgorixPay\Events\PaymentMatched;
+use Illuminate\Support\Facades\Event;
+
+Event::listen(function (PaymentMatched $event): void {
+    $order = $event->pending->resolvePayable();    // Eloquent model qaytadi
+    $order?->markPaid($event->payment->transactionId);
+
+    // $event->pending  → PendingPayment (sizning expectation)
+    // $event->payment  → ParsedPayment (bank xabaridan)
+    // $event->bankMessageId, $event->bankSource
+});
+```
+
+### Tail mode
+
+| Mode | Range | Slots | Trade-off |
+|---|---|---|---|
+| `tiyin` (default) | `50 000.01 – 50 000.99` | 99 ta sum-per-vaqt | mijoz sezmaydi |
+| `sum` | `50 001 – 50 999 so'm` | 999 ta | ko'proq slot, mijoz ortiqcha so'mni ko'radi |
+
+`ALGORIX_MATCHER_TAIL_MODE=tiyin|sum` orqali tanlanadi.
+
+### Matcher config
+
+| Env | Default | Description |
+|---|---|---|
+| `ALGORIX_MATCHER_ENABLED` | `true` | Listener'ni o'chirish/yoqish |
+| `ALGORIX_MATCHER_CACHE` | default | Cache store (e.g. `redis`) |
+| `ALGORIX_MATCHER_TTL` | `900` | Default expiration (sekund) |
+| `ALGORIX_MATCHER_TAIL_MODE` | `tiyin` | `tiyin` yoki `sum` |
+| `ALGORIX_MATCHER_MAX_ATTEMPTS` | `50` | Tail collision retry limit |
+| `ALGORIX_MATCHER_CURRENCY_MISMATCH` | `log` | `drop` \| `log` \| `match_anyway` |
+
+### Custom tail generator
+
+`config/algorix-pay.php`'da `matcher.tail_generators` map'iga o'z class'ingizni qo'shing (interface: `\AlgorixPay\Contracts\TailGenerator`).
+
+---
+
 ## Run the listener
 
 ```bash
@@ -135,20 +213,36 @@ number_format($payment->amountTiyin / 100, 0, '.', ' ').' so\'m';
 ```
 src/
 ├── Console/
-│   └── ListenPaymentsCommand.php   # php artisan pay:listen
+│   └── ListenPaymentsCommand.php       # php artisan pay:listen
 ├── Contracts/
-│   └── PaymentDriver.php
+│   ├── PaymentDriver.php
+│   └── TailGenerator.php
 ├── Drivers/
-│   ├── AbstractRegexDriver.php     # normalize + amount + currency + cards
+│   ├── AbstractRegexDriver.php         # normalize + amount + currency + cards
 │   ├── ClickDriver.php
 │   ├── PaymeDriver.php
 │   └── UzumDriver.php
 ├── Events/
-│   └── PaymentReceived.php
+│   ├── PaymentReceived.php             # bank message → parsed
+│   ├── PaymentExpected.php             # merchant created an expectation
+│   └── PaymentMatched.php              # received ↔ expected matched
+├── Facades/
+│   └── AlgorixPay.php                  # AlgorixPay::expect(...)
+├── Listeners/
+│   └── MatchPendingPayment.php         # auto-matcher on PaymentReceived
+├── Matcher/
+│   ├── AlgorixPayManager.php           # facade accessor (fresh builder per call)
+│   ├── PaymentExpectation.php          # fluent builder
+│   ├── Exceptions/
+│   │   └── TailExhaustedException.php
+│   └── Tail/
+│       ├── TiyinTailGenerator.php      # +1..99 tiyin
+│       └── SumTailGenerator.php        # +1..999 so'm
 ├── Services/
-│   └── MadelineService.php         # MTProto event loop + dedup + dispatch
+│   └── MadelineService.php             # MTProto event loop + dedup + dispatch
 ├── Support/
-│   └── ParsedPayment.php
+│   ├── ParsedPayment.php
+│   └── PendingPayment.php              # merchant-side DTO
 └── AlgorixPayServiceProvider.php
 ```
 
